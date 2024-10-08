@@ -6,205 +6,118 @@
 /*   By: marvin <marvin@42.fr>                      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/09/24 21:08:14 by marvin            #+#    #+#             */
-/*   Updated: 2024/10/03 01:30:37 by marvin           ###   ########.fr       */
+/*   Updated: 2024/10/08 19:20:02 by marvin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "arena.h"
+#include "push_swap.h"
+#include "debug.h"
+
 #include "libft.h"
 #include "vector.h"
 
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <stdlib.h>		// EXIT_FAILURE
+#include <unistd.h>		// write()
 
-typedef struct s_pair
+int	g_ops = 0;
+
+
+static void	stacks_init(t_alloc handle, t_stacks *stacks, t_intv *ints)
 {
-	ptrdiff_t	index;
-	int			value;
-}	t_pair;
-
-typedef struct s_pairv
-{
-	t_pair		*data;
-	ptrdiff_t	size;
-	ptrdiff_t	len;
-	ptrdiff_t	cap;
-}	t_pairv;
-
-static void pri_pair(void *elem)
-{
-	t_pair *pp;
-
-	pp = elem;
-	ft_printf("{%t, %d}", pp->index, pp->value);
+	stacks->a = cirbuf_vdup(handle.perm, ints);
+	stacks->b = cirbuf_new(handle.perm, ints->len, ints->size);
 }
 
-static void	pri_int(void *elem)
+int	main(int argc, char **argv)
 {
-	ft_printf("%d", *(int *)elem);
-}
-
-static void	pri_str(void *elem)
-{
-	ft_printf("%s", *(char **)elem);
-}
-
-static void	vector_print(void *vecptr, void (*pri_elem)(void *))
-{
-	t_vector	*v;
-	char	*data;
-	int		i;
-
-	i = 0;
-	v = (t_vector *)vecptr;
-	data = (char *)v->data;
-	while (i < v->len)
-	{
-		ft_printf("%d: ", i);
-		pri_elem(data + (i * v->size));
-		ft_printf("\n");
-		++i;
-	}
-}
-
-void	print_arena_dbg(t_arena *a)
-{
-	ft_dprintf(STDERR_FILENO, "----------------------------\n");
-	ft_dprintf(STDERR_FILENO, "  In use:   %t bytes\n", a->pos - a->beg);
-	ft_dprintf(STDERR_FILENO, "  Left:     %t bytes\n", a->end - a->pos);
-	ft_dprintf(STDERR_FILENO, "  Capacity: %t bytes\n", a->end - a->beg);
-	ft_dprintf(STDERR_FILENO, "----------------------------\n");
-}
-
-int	cmp_ints(const void *a, const void *b)
-{
-	return (*(int *)a - *(int *)b);
-}
-
-int	cmp_pairs(const void *a, const void *b)
-{
-	const t_pair	*pa;
-	const t_pair	*pb;
-	int	val_a;
-	int	val_b;
-
-	pa = a;
-	pb = b;
-	val_a = pa->value;
-	val_b = pb->value;
-	return (val_a - val_b);
-}
-
-// Split args with space delimiter.
-static int check_args(t_arena *a, t_intv *out, char **argv, int argc)
-{
-	t_arena	*temp;
-	t_strv	*args;
-	int		err;
-
-	temp = arena_new(ARENA_SIZE);
-	if (argc == 2)
-		args = strv_split(temp, argv[1], ' ');
-	else
-		args = strv_ndup(temp, argv + 1, argc - 1);
-	err = intv_parse(a, out, args);
-	arena_release(temp);
-	return (err);
-}
-
-t_pairv	*pairv_new(t_arena *a, t_intv *iv)
-{
-	t_pairv		*new;
-	t_pair		elem;
-	ptrdiff_t	i;
-
-	new = arena_alloc(a, sizeof(*new));
-	new = vector_new(a, iv->len, sizeof(t_pair));
-	i = 0;
-	while (i < iv->len)
-	{
-		elem.index = i;
-		elem.value = iv->data[i];
-		vector_push(a, new, &elem);
-		++i;
-	}
-	return (new);
-}
-
-static bool	is_duplicate(t_pairv *pairs)
-{
-	ptrdiff_t	i;
-
-	i = 0;
-	while (i < pairs->len - 1)
-	{
-		if (pairs->data[i].value == pairs->data[i + 1].value)
-			return (true);
-		++i;
-	}
-	return (false);
-}
-
-static int	normalize(t_intv *ints)
-{
-	t_arena		*temp;
-	t_pairv		*pairs;
-	ptrdiff_t	i;
-
-	temp = arena_new(ARENA_SIZE);
-	pairs = pairv_new(temp, ints);
-	ft_qsort(pairs->data, pairs->len, pairs->size, cmp_pairs);
-	if (is_duplicate(pairs))
-	{
-		arena_release(temp);
-		return (1);
-	}
-	i = 0;
-	while (i < ints->len)
-	{
-		ints->data[pairs->data[i].index] = i;
-		++i;
-	}
-	arena_release(temp);
-	return (0);
-}
-
-int	main(int argc, char *argv[])
-{
-	t_arena	*perm;
-	t_intv	ints;
-	int		err;
+	t_alloc		handle;
+	t_stacks	stacks;
+	t_intv		ints;
+	int			err;
 
 	if (argc < 2)
 		return (EXIT_FAILURE);
 
-	perm = arena_new(ARENA_SIZE);
-	print_arena_dbg(perm);
-
-	ft_printf("Array:\n");
-	err = check_args(perm, &ints, argv, argc);
+	allocator_init(&handle, ARENA_SIZE);
+	err = process_input(handle, &ints, argv, argc);
 	if (err)
 	{
-		write(STDOUT_FILENO, "Error\n", 6);
-		print_arena_dbg(perm);
-		arena_release(perm);
-		return (EXIT_FAILURE);
+		write(STDERR_FILENO, "Error\n", 6);
+		allocator_destroy(handle);
+		return (1);
 	}
-	vector_print(&ints, pri_int);
 
-	ft_printf("Normalized array:\n");
-	err = normalize(&ints);
-	if (err)
+	stacks_init(handle, &stacks, &ints);
+
+	print_stacks(stacks);
+
+	// GOAL: keep building a LIS on stack A
+
+	int min, max, curr_a, curr_b;
+
+	int last_a;
+
+	min = max = *(int *)cirbuf_front(stacks.a);
+	rotate_a(handle, stacks);
+
+	curr_a = *(int *)cirbuf_front(stacks.a);
+
+	// not the best condition right now
+	while (curr_a != min)
 	{
-		write(STDOUT_FILENO, "Error\n", 6);
-		print_arena_dbg(perm);
-		arena_release(perm);
-		return (EXIT_FAILURE);	
-	}
-	vector_print(&ints, pri_int);
+		if (curr_a > max)
+		{
+			max = curr_a;
+			rotate_a(handle, stacks);
+		}
+		else
+		{
+			if (cirbuf_is_empty(stacks.b))
+				push_b(stacks);
+			else
+			{
+				curr_b = *(int *)cirbuf_front(stacks.b);
 
-	print_arena_dbg(perm);
-	arena_release(perm);
+				if (curr_a > curr_b)
+				{
+					push_b(stacks);
+				}
+				else
+				{
+					// reinsert now
+					// this is where the complication begins..
+					print_stacks(stacks);
+					while (!cirbuf_is_empty(stacks.b))
+					{
+						curr_b = *(int *)cirbuf_front(stacks.b);
+						last_a = *(int *)cirbuf_back(stacks.a);
+						if (last_a > curr_b)
+							reverse_rotate_a(handle, stacks);
+						else
+							push_a(stacks);
+					}
+					break ;
+				}
+			}
+		}
+		// curr a can never be empty because we start with min = max
+		curr_a = *(int *)cirbuf_front(stacks.a);
+	}
+	
+	print_stacks(stacks);
+
+	/*
+	int pivot = (0 + stacks.a->len - 1) / 2;
+	divide_a_recursive(handle, stacks, 0, stacks.a->len - 1);
+	reinsert_a(handle, stacks, pivot);
+	divide_b_recursive(handle, stacks, 0, pivot);
+	reinsert_b(handle, stacks, pivot);
+	*/
+
+	//print_stacks(stacks);
+	
+	print_alloc_dbg(handle);
+	allocator_destroy(handle);
+	ft_printf("Total operations: %d\n", g_ops);
 	return (0);
 }
